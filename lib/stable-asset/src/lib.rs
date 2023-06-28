@@ -99,6 +99,17 @@ pub mod traits {
 		type AccountId;
 		type BlockNumber;
 
+		fn insert_pool(
+			pool_id: StableAssetPoolId,
+			pool_info: &StableAssetPoolInfo<
+				Self::AssetId,
+				Self::AtLeast64BitUnsigned,
+				Self::Balance,
+				Self::AccountId,
+				Self::BlockNumber,
+			>,
+		);
+
 		fn pool_count() -> StableAssetPoolId;
 
 		fn pool(
@@ -1300,6 +1311,19 @@ impl<T: Config> StableAsset for Pallet<T> {
 	type Balance = T::Balance;
 	type AccountId = T::AccountId;
 	type BlockNumber = T::BlockNumber;
+
+	fn insert_pool(
+		pool_id: StableAssetPoolId,
+		pool_info: &StableAssetPoolInfo<
+			Self::AssetId,
+			Self::AtLeast64BitUnsigned,
+			Self::Balance,
+			Self::AccountId,
+			Self::BlockNumber,
+		>,
+	) {
+		Pools::<T>::insert(pool_id, pool_info)
+	}
 
 	fn pool_count() -> StableAssetPoolId {
 		PoolCount::<T>::get()
