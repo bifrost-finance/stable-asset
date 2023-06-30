@@ -84,7 +84,9 @@ pub trait WeightInfo {
 }
 
 pub mod traits {
-	use crate::{PoolTokenIndex, RedeemProportionResult, StableAssetPoolId, StableAssetPoolInfo, SwapResult};
+	use crate::{
+		MintResult, PoolTokenIndex, RedeemProportionResult, StableAssetPoolId, StableAssetPoolInfo, SwapResult,
+	};
 	use frame_support::dispatch::{DispatchError, DispatchResult};
 	use sp_std::prelude::*;
 
@@ -98,6 +100,7 @@ pub mod traits {
 		type Balance;
 		type AccountId;
 		type BlockNumber;
+		type Config: crate::Config;
 
 		fn insert_pool(
 			pool_id: StableAssetPoolId,
@@ -299,6 +302,18 @@ pub mod traits {
 			output_index: PoolTokenIndex,
 			dy_bal: Self::Balance,
 		) -> Option<SwapResult<Self::Balance>>;
+
+		fn get_mint_amount(
+			pool_id: StableAssetPoolId,
+			amounts_bal: &[Self::Balance],
+		) -> Option<MintResult<Self::Config>>;
+
+		fn get_a(
+			a0: Self::AtLeast64BitUnsigned,
+			t0: Self::BlockNumber,
+			a1: Self::AtLeast64BitUnsigned,
+			t1: Self::BlockNumber,
+		) -> Option<Self::AtLeast64BitUnsigned>;
 	}
 }
 
@@ -1311,6 +1326,7 @@ impl<T: Config> StableAsset for Pallet<T> {
 	type Balance = T::Balance;
 	type AccountId = T::AccountId;
 	type BlockNumber = T::BlockNumber;
+	type Config = T;
 
 	fn insert_pool(
 		pool_id: StableAssetPoolId,
@@ -2018,5 +2034,22 @@ impl<T: Config> StableAsset for Pallet<T> {
 			Some(pool_info) => Self::get_swap_amount_exact(&pool_info, input_index, output_index, dy_bal),
 			None => None,
 		}
+	}
+
+	fn get_mint_amount(pool_id: StableAssetPoolId, amounts_bal: &[Self::Balance]) -> Option<MintResult<T>> {
+		let pool_info_opt = Self::pool(pool_id);
+		match pool_info_opt {
+			Some(pool_info) => Self::get_mint_amount(&pool_info, amounts_bal).ok(),
+			None => None,
+		}
+	}
+
+	fn get_a(
+		a0: T::AtLeast64BitUnsigned,
+		t0: T::BlockNumber,
+		a1: T::AtLeast64BitUnsigned,
+		t1: T::BlockNumber,
+	) -> Option<T::AtLeast64BitUnsigned> {
+		Self::get_a(a0, t0, a1, t1)
 	}
 }
