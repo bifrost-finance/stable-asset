@@ -751,15 +751,15 @@ pub mod pallet {
 	}
 }
 impl<T: Config> Pallet<T> {
-	pub(crate) fn convert_vec_number_to_balance(numbers: Vec<T::AtLeast64BitUnsigned>) -> Vec<T::Balance> {
+	pub fn convert_vec_number_to_balance(numbers: Vec<T::AtLeast64BitUnsigned>) -> Vec<T::Balance> {
 		numbers.into_iter().map(|x| x.into()).collect()
 	}
 
-	pub(crate) fn convert_vec_balance_to_number(balances: Vec<T::Balance>) -> Vec<T::AtLeast64BitUnsigned> {
+	pub fn convert_vec_balance_to_number(balances: Vec<T::Balance>) -> Vec<T::AtLeast64BitUnsigned> {
 		balances.into_iter().map(|x| x.into()).collect()
 	}
 
-	pub(crate) fn get_a(
+	pub fn get_a(
 		a0: T::AtLeast64BitUnsigned,
 		t0: T::BlockNumber,
 		a1: T::AtLeast64BitUnsigned,
@@ -783,7 +783,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub(crate) fn get_d(
+	pub fn get_d(
 		balances: &[T::AtLeast64BitUnsigned],
 		a: T::AtLeast64BitUnsigned,
 	) -> Option<T::AtLeast64BitUnsigned> {
@@ -837,7 +837,7 @@ impl<T: Config> Pallet<T> {
 		Some(result.into())
 	}
 
-	pub(crate) fn get_y(
+	pub fn get_y(
 		balances: &[T::AtLeast64BitUnsigned],
 		token_index: PoolTokenIndex,
 		target_d: T::AtLeast64BitUnsigned,
@@ -890,7 +890,7 @@ impl<T: Config> Pallet<T> {
 		Some(result.into())
 	}
 
-	pub(crate) fn get_mint_amount(
+	pub fn get_mint_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		amounts_bal: &[T::Balance],
 	) -> Result<MintResult<T>, Error<T>> {
@@ -949,7 +949,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_swap_amount(
+	pub fn get_swap_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		input_index: PoolTokenIndex,
 		output_index: PoolTokenIndex,
@@ -1015,7 +1015,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_swap_amount_exact(
+	pub fn get_swap_amount_exact(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		input_index: PoolTokenIndex,
 		output_index: PoolTokenIndex,
@@ -1072,7 +1072,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_redeem_proportion_amount(
+	pub fn get_redeem_proportion_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		amount_bal: T::Balance,
 	) -> Result<RedeemProportionResult<T::Balance>, Error<T>> {
@@ -1122,7 +1122,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_redeem_single_amount(
+	pub fn get_redeem_single_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		amount_bal: T::Balance,
 		i: PoolTokenIndex,
@@ -1183,7 +1183,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_redeem_multi_amount(
+	pub fn get_redeem_multi_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 		amounts: &[T::Balance],
 	) -> Result<RedeemMultiResult<T>, Error<T>> {
@@ -1240,7 +1240,7 @@ impl<T: Config> Pallet<T> {
 		})
 	}
 
-	pub(crate) fn get_pending_fee_amount(
+	pub fn get_pending_fee_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 	) -> Result<PendingFeeResult<T>, Error<T>> {
 		let mut balances: Vec<T::AtLeast64BitUnsigned> =
@@ -1279,7 +1279,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub(crate) fn get_collect_yield_amount(
+	pub fn get_collect_yield_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 	) -> Result<
 		StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
@@ -1299,7 +1299,7 @@ impl<T: Config> Pallet<T> {
 		Ok(cloned_stable_asset_info)
 	}
 
-	pub(crate) fn get_balance_update_amount(
+	pub fn get_balance_update_amount(
 		pool_info: &StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 	) -> Result<
 		StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
