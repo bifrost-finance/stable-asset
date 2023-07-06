@@ -102,6 +102,13 @@ pub mod traits {
 		type BlockNumber;
 		type Config: crate::Config;
 
+		fn set_token_rate(
+			asset_id: Self::AssetId,
+			token_rate: Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>,
+		);
+
+		fn get_token_rate(asset_id: Self::AssetId) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>;
+
 		fn insert_pool(
 			pool_id: StableAssetPoolId,
 			pool_info: &StableAssetPoolInfo<
@@ -395,6 +402,11 @@ pub mod pallet {
 		StableAssetPoolId,
 		StableAssetPoolInfo<T::AssetId, T::AtLeast64BitUnsigned, T::Balance, T::AccountId, T::BlockNumber>,
 	>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn token_rate_caches)]
+	pub type TokenRateCaches<T: Config> =
+		StorageMap<_, Twox64Concat, T::AssetId, (T::AtLeast64BitUnsigned, T::AtLeast64BitUnsigned)>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -783,10 +795,7 @@ impl<T: Config> Pallet<T> {
 		}
 	}
 
-	pub fn get_d(
-		balances: &[T::AtLeast64BitUnsigned],
-		a: T::AtLeast64BitUnsigned,
-	) -> Option<T::AtLeast64BitUnsigned> {
+	pub fn get_d(balances: &[T::AtLeast64BitUnsigned], a: T::AtLeast64BitUnsigned) -> Option<T::AtLeast64BitUnsigned> {
 		let zero: U512 = U512::from(0u128);
 		let one: U512 = U512::from(1u128);
 		let mut sum: U512 = U512::from(0u128);
@@ -1254,8 +1263,15 @@ impl<T: Config> Pallet<T> {
 		.ok_or(Error::<T>::Math)?;
 		let old_d: T::AtLeast64BitUnsigned = pool_info.total_supply.into();
 		for (i, balance) in balances.iter_mut().enumerate() {
-			let balance_of: T::AtLeast64BitUnsigned =
+			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
+			if let Some((denominator, numerator)) = Self::token_rate_caches(pool_info.assets[i]) {
+				balance_of = balance_of
+					.checked_mul(&numerator)
+					.ok_or(Error::<T>::Math)?
+					.checked_div(&denominator)
+					.ok_or(Error::<T>::Math)?;
+			}
 			*balance = balance_of
 				.checked_mul(&pool_info.precisions[i])
 				.ok_or(Error::<T>::Math)?;
@@ -1307,8 +1323,15 @@ impl<T: Config> Pallet<T> {
 	> {
 		let mut updated_balances = pool_info.balances.clone();
 		for (i, balance) in updated_balances.iter_mut().enumerate() {
-			let balance_of: T::AtLeast64BitUnsigned =
+			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
+			if let Some((denominator, numerator)) = Self::token_rate_caches(pool_info.assets[i]) {
+				balance_of = balance_of
+					.checked_mul(&numerator)
+					.ok_or(Error::<T>::Math)?
+					.checked_div(&denominator)
+					.ok_or(Error::<T>::Math)?;
+			}
 			*balance = balance_of
 				.checked_mul(&pool_info.precisions[i])
 				.ok_or(Error::<T>::Math)?
@@ -1327,6 +1350,21 @@ impl<T: Config> StableAsset for Pallet<T> {
 	type AccountId = T::AccountId;
 	type BlockNumber = T::BlockNumber;
 	type Config = T;
+
+	fn set_token_rate(
+		asset_id: Self::AssetId,
+		token_rate: Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>,
+	) {
+		if let Some(is_token_rate) = token_rate {
+			TokenRateCaches::<T>::insert(asset_id, is_token_rate);
+		} else {
+			TokenRateCaches::<T>::remove(asset_id);
+		}
+	}
+
+	fn get_token_rate(asset_id: Self::AssetId) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)> {
+		TokenRateCaches::<T>::get(asset_id)
+	}
 
 	fn insert_pool(
 		pool_id: StableAssetPoolId,
@@ -1992,8 +2030,13 @@ impl<T: Config> StableAsset for Pallet<T> {
 			if let (Some(input_index), Some(output_index)) = (maybe_input_index, maybe_output_index) {
 				// calculate swap amount
 				if let Ok(swap_result) = Self::get_swap_amount(&pool_info, input_index, output_index, input_amount) {
+					let mut balance_of: T::AtLeast64BitUnsigned =
+						T::Assets::balance(output_asset, &pool_info.account_id).into();
+					if let Some((denominator, numerator)) = Self::token_rate_caches(output_asset) {
+						balance_of = balance_of.checked_mul(&numerator)?.checked_div(&denominator)?;
+					}
 					// make sure pool can affort the output amount
-					if swap_result.dy <= T::Assets::balance(output_asset, &pool_info.account_id) {
+					if swap_result.dy <= balance_of.into() {
 						if let Some((_, _, _, output_amount)) = maybe_best {
 							// this pool is better, replace maybe_best
 							if output_amount < swap_result.dy {
