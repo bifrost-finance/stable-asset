@@ -31,7 +31,7 @@ mod tests;
 
 pub mod weights;
 
-use crate::traits::StableAsset;
+pub use crate::traits::StableAsset;
 use frame_support::{
 	codec::{Decode, Encode},
 	dispatch::{DispatchError, DispatchResult},
