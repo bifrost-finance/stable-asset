@@ -409,7 +409,7 @@ pub mod pallet {
 		StorageMap<_, Twox64Concat, T::AssetId, (T::AtLeast64BitUnsigned, T::AtLeast64BitUnsigned)>;
 
 	#[pallet::event]
-	#[pallet::generate_deposit(pub(super) fn deposit_event)]
+	#[pallet::generate_deposit(pub fn deposit_event)]
 	pub enum Event<T: Config> {
 		CreatePool {
 			pool_id: StableAssetPoolId,
