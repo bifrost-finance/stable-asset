@@ -50,6 +50,7 @@ use sp_runtime::{
 	SaturatedConversion,
 };
 use sp_std::prelude::*;
+use bifrost_stable_pool::StablePool;
 
 pub type PoolTokenIndex = u32;
 
@@ -59,6 +60,7 @@ const NUMBER_OF_ITERATIONS_TO_CONVERGE: i32 = 255; // the number of iterations t
 
 #[derive(Encode, Decode, Clone, Default, PartialEq, Eq, Debug, TypeInfo)]
 pub struct StableAssetPoolInfo<AssetId, AtLeast64BitUnsigned, Balance, AccountId, BlockNumber> {
+	pub pool_id: StableAssetPoolId,
 	pub pool_asset: AssetId,
 	pub assets: Vec<AssetId>,
 	pub precisions: Vec<AtLeast64BitUnsigned>,
@@ -388,6 +390,14 @@ pub mod pallet {
 
 		/// The origin which may create pool or modify pool.
 		type ListingOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+		type StablePool: bifrost_stable_pool::traits::StablePool<
+			AssetId = Self::AssetId,
+			Balance = Self::Balance,
+			AtLeast64BitUnsigned = Self::AtLeast64BitUnsigned,
+			AccountId = Self::AccountId,
+			BlockNumber = Self::BlockNumber,
+			>;
 	}
 
 	#[pallet::pallet]
@@ -1294,7 +1304,7 @@ impl<T: Config> Pallet<T> {
 		for (i, balance) in balances.iter_mut().enumerate() {
 			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
-			if let Some((denominator, numerator)) = Self::token_rate_caches(pool_info.assets[i]) {
+			if let Some((denominator, numerator)) = T::StablePool::get_token_rate(pool_info.pool_id, pool_info.assets[i]) {
 				balance_of = balance_of
 					.checked_mul(&numerator)
 					.ok_or(Error::<T>::Math)?
@@ -1358,7 +1368,7 @@ impl<T: Config> Pallet<T> {
 		for (i, balance) in updated_balances.iter_mut().enumerate() {
 			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
-			if let Some((denominator, numerator)) = Self::token_rate_caches(pool_info.assets[i]) {
+			if let Some((denominator, numerator)) =T::StablePool::get_token_rate(pool_info.pool_id ,pool_info.assets[i]) {
 				balance_of = balance_of
 					.checked_mul(&numerator)
 					.ok_or(Error::<T>::Math)?
@@ -1598,6 +1608,7 @@ impl<T: Config> StableAsset for Pallet<T> {
 				frame_system::Pallet::<T>::inc_providers(&swap_id);
 				let current_block = frame_system::Pallet::<T>::block_number();
 				*maybe_pool_info = Some(StableAssetPoolInfo {
+					pool_id,
 					pool_asset,
 					assets,
 					precisions,
@@ -2137,7 +2148,7 @@ impl<T: Config> StableAsset for Pallet<T> {
 				if let Ok(swap_result) = Self::get_swap_amount(&pool_info, input_index, output_index, input_amount) {
 					let mut balance_of: T::AtLeast64BitUnsigned =
 						T::Assets::balance(output_asset, &pool_info.account_id).into();
-					if let Some((denominator, numerator)) = Self::token_rate_caches(output_asset) {
+					if let Some((denominator, numerator)) = T::StablePool::get_token_rate(pool_info.pool_id, output_asset) {
 						balance_of = balance_of.checked_mul(&numerator)?.checked_div(&denominator)?;
 					}
 					// make sure pool can affort the output amount
