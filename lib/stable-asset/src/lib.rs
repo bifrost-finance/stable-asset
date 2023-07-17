@@ -50,7 +50,6 @@ use sp_runtime::{
 	SaturatedConversion,
 };
 use sp_std::prelude::*;
-use bifrost_stable_pool::StablePool;
 
 pub type PoolTokenIndex = u32;
 
@@ -111,11 +110,14 @@ pub mod traits {
 		type Config: crate::Config;
 
 		fn set_token_rate(
-			asset_id: Self::AssetId,
-			token_rate: Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>,
-		);
+			pool_id: StableAssetPoolId,
+			token_rate_info: Vec<(
+			Self::AssetId,
+			(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned),
+		)>,
+		) -> DispatchResult;
 
-		fn get_token_rate(asset_id: Self::AssetId) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>;
+		fn get_token_rate(pool_id: StableAssetPoolId, asset_id: Self::AssetId) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>;
 
 		fn insert_pool(
 			pool_id: StableAssetPoolId,
@@ -390,14 +392,6 @@ pub mod pallet {
 
 		/// The origin which may create pool or modify pool.
 		type ListingOrigin: EnsureOrigin<Self::RuntimeOrigin>;
-
-		type StablePool: bifrost_stable_pool::traits::StablePool<
-			AssetId = Self::AssetId,
-			Balance = Self::Balance,
-			AtLeast64BitUnsigned = Self::AtLeast64BitUnsigned,
-			AccountId = Self::AccountId,
-			BlockNumber = Self::BlockNumber,
-			>;
 	}
 
 	#[pallet::pallet]
@@ -419,8 +413,14 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn token_rate_caches)]
-	pub type TokenRateCaches<T: Config> =
-		StorageMap<_, Twox64Concat, T::AssetId, (T::AtLeast64BitUnsigned, T::AtLeast64BitUnsigned)>;
+	pub type TokenRateCaches<T: Config> = StorageDoubleMap<
+			_,
+			Twox64Concat,
+			StableAssetPoolId,
+			Twox64Concat,
+			T::AssetId,
+			(T::AtLeast64BitUnsigned, T::AtLeast64BitUnsigned),
+	>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub fn deposit_event)]
@@ -542,6 +542,7 @@ pub mod pallet {
 		SwapUnderMin,
 		RedeemUnderMin,
 		RedeemOverMax,
+		TokenRateNotCleared,
 	}
 
 	#[derive(Encode, Decode, Clone, Default, PartialEq, Eq, Debug)]
@@ -1304,7 +1305,7 @@ impl<T: Config> Pallet<T> {
 		for (i, balance) in balances.iter_mut().enumerate() {
 			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
-			if let Some((denominator, numerator)) = T::StablePool::get_token_rate(pool_info.pool_id, pool_info.assets[i]) {
+			if let Some((denominator, numerator)) = Self::get_token_rate(pool_info.pool_id, pool_info.assets[i]) {
 				balance_of = balance_of
 					.checked_mul(&numerator)
 					.ok_or(Error::<T>::Math)?
@@ -1368,7 +1369,7 @@ impl<T: Config> Pallet<T> {
 		for (i, balance) in updated_balances.iter_mut().enumerate() {
 			let mut balance_of: T::AtLeast64BitUnsigned =
 				T::Assets::balance(pool_info.assets[i], &pool_info.account_id).into();
-			if let Some((denominator, numerator)) =T::StablePool::get_token_rate(pool_info.pool_id ,pool_info.assets[i]) {
+			if let Some((denominator, numerator)) = Self::get_token_rate(pool_info.pool_id ,pool_info.assets[i]) {
 				balance_of = balance_of
 					.checked_mul(&numerator)
 					.ok_or(Error::<T>::Math)?
@@ -1395,18 +1396,46 @@ impl<T: Config> StableAsset for Pallet<T> {
 	type Config = T;
 
 	fn set_token_rate(
-		asset_id: Self::AssetId,
-		token_rate: Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)>,
-	) {
-		if let Some(is_token_rate) = token_rate {
-			TokenRateCaches::<T>::insert(asset_id, is_token_rate);
+		pool_id: StableAssetPoolId,
+		token_rate_info: Vec<(
+			Self::AssetId,
+			(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned),
+		)>,
+	) -> DispatchResult {
+		if token_rate_info.last().is_none() {
+			let res = TokenRateCaches::<T>::clear_prefix(pool_id, u32::max_value(), None);
+			ensure!(res.maybe_cursor.is_none(), Error::<T>::TokenRateNotCleared);
 		} else {
-			TokenRateCaches::<T>::remove(asset_id);
+			let mut token_rate_info = token_rate_info.into_iter();
+			let mut token_rate = token_rate_info.next();
+			let mut cursor = TokenRateCaches::<T>::iter_prefix(pool_id);
+			while let Some((asset_id, is_token_rate)) = cursor.next() {
+				if let Some((new_asset_id, new_is_token_rate)) = token_rate {
+					if asset_id == new_asset_id {
+						if is_token_rate != new_is_token_rate {
+							TokenRateCaches::<T>::insert(pool_id, asset_id, new_is_token_rate);
+						}
+						token_rate = token_rate_info.next();
+					} else {
+						TokenRateCaches::<T>::remove(pool_id, asset_id);
+					}
+				} else {
+					TokenRateCaches::<T>::remove(pool_id, asset_id);
+				}
+			}
+			while let Some((asset_id, is_token_rate)) = token_rate {
+				TokenRateCaches::<T>::insert(pool_id, asset_id, is_token_rate);
+				token_rate = token_rate_info.next();
+			}
 		}
+		Ok(())
 	}
 
-	fn get_token_rate(asset_id: Self::AssetId) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)> {
-		TokenRateCaches::<T>::get(asset_id)
+	fn get_token_rate(
+		pool_id: StableAssetPoolId,
+		asset_id: Self::AssetId,
+	) -> Option<(Self::AtLeast64BitUnsigned, Self::AtLeast64BitUnsigned)> {
+		TokenRateCaches::<T>::get(pool_id, asset_id)
 	}
 
 	fn insert_pool(
@@ -2148,7 +2177,7 @@ impl<T: Config> StableAsset for Pallet<T> {
 				if let Ok(swap_result) = Self::get_swap_amount(&pool_info, input_index, output_index, input_amount) {
 					let mut balance_of: T::AtLeast64BitUnsigned =
 						T::Assets::balance(output_asset, &pool_info.account_id).into();
-					if let Some((denominator, numerator)) = T::StablePool::get_token_rate(pool_info.pool_id, output_asset) {
+					if let Some((denominator, numerator)) = Self::get_token_rate(pool_info.pool_id, output_asset) {
 						balance_of = balance_of.checked_mul(&numerator)?.checked_div(&denominator)?;
 					}
 					// make sure pool can affort the output amount
